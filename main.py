@@ -142,9 +142,8 @@ def process_files_arg(files):
     return processed_files
 
 
-if __name__ == "__main__":
+async def async_main():
     api_id, api_hash, bot_token = validate_env()
-    bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)
 
     parser = get_arg_parser()
     args = parser.parse_args()
@@ -152,14 +151,21 @@ if __name__ == "__main__":
     if args.files:
         args.files = process_files_arg(args.files)
 
-    with bot:
-        result = bot.loop.run_until_complete(main(bot, args.to, args.message, args.files))
+    async with TelegramClient("bot", api_id, api_hash) as bot:
+        await bot.start(bot_token=bot_token)
+        result = await main(bot, args.to, args.message, args.files)
 
     # Output results
     for url in result.message_urls:
         print(f"Message URL: {url}")
 
     write_github_output(result)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(async_main())
 
     # Example:
     # python3 main.py --to "me" --message "Hello, World!" --files "file1.txt" "file2.txt"
