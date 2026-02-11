@@ -53,8 +53,21 @@ def get_arg_parser():
     return parser
 
 
+def process_files_arg(files):
+    """处理 --files 参数中可能包含的换行符（GitHub Actions 多行输入场景）"""
+    processed_files = []
+    for file_arg in files:
+        processed_files.extend(
+            [arg.strip() for arg in file_arg.splitlines() if arg.strip()]
+        )
+    return processed_files
+
+
 parser = get_arg_parser()
 args = parser.parse_args()
+
+if args.files:
+    args.files = process_files_arg(args.files)
 
 with bot:
     bot.loop.run_until_complete(main(bot, args.to, args.message, args.files))

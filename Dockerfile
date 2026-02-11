@@ -5,4 +5,4 @@ COPY . /app
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-ENTRYPOINT ["python", "/app/exec.py"]
+ENTRYPOINT ["python", "/app/main.py"]
