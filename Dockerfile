@@ -1,5 +1,5 @@
 FROM python:3.14.3-alpine
-MAINTAINER xz <xiangzhedev@gmail.com>
+LABEL maintainer="xz-dev <xiangzhedev@gmail.com>"
 
 COPY . /app
 

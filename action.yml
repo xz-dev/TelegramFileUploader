@@ -11,9 +11,6 @@ inputs:
   files:
     description: 'Files (one file per line)'
     required: true
-outputs:
-  status:
-    description: 'Command status'
 runs:
   using: 'docker'
   image: 'Dockerfile'

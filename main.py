@@ -38,13 +38,13 @@ async def main(client: TelegramClient, to: str, message: str, files: list[str]):
         print(f"Uploaded {file}")
         uploaded_files.append(ufile)
 
-    print(f"Sending message")
+    print("Sending message")
     message_list = [None for i in range(len(uploaded_files) - 1)]
     message_list.append(message)
     await client.send_file(
         entity=to, file=uploaded_files, caption=message_list, progress_callback=callback
     )
-    print(f"Sent message")
+    print("Sent message")
 
 
 def get_arg_parser():
