@@ -1,34 +1,44 @@
-name: Release
+name: Update Major Version Tag
+run-name: Move major tag for ${{ github.ref_name }}
 
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v*.*.*"
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    name: Create Release & Update Major Tag
+  update-major-tag:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Extract version info
-        id: version
+      - name: Check tag format
+        id: check
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          MAJOR="${TAG%%.*}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "major=${TAG%%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping tag '$TAG' (not vX.Y.Z format)"
+          fi
 
-      - name: Create GitHub Release
-        run: gh release create "${{ steps.version.outputs.tag }}" --title "${{ steps.version.outputs.tag }}" --generate-notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v6
+        if: steps.check.outputs.valid == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        if: steps.check.outputs.valid == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Update major version tag
+        if: steps.check.outputs.valid == 'true'
         run: |
-          git tag -f "${{ steps.version.outputs.major }}" "${{ steps.version.outputs.tag }}"
-          git push -f origin "${{ steps.version.outputs.major }}"
+          git tag -f "${{ steps.check.outputs.major }}" "${{ steps.check.outputs.tag }}"
+          git push -f origin "${{ steps.check.outputs.major }}"
