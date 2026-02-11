@@ -11,6 +11,15 @@ inputs:
   files:
     description: 'Files (one file per line)'
     required: true
+outputs:
+  message_url:
+    description: 'URL of the first uploaded message'
+  message_urls:
+    description: 'Comma-separated URLs of all uploaded messages'
+  message_id:
+    description: 'ID of the first uploaded message'
+  message_ids:
+    description: 'Comma-separated IDs of all uploaded messages'
 runs:
   using: 'docker'
   image: 'Dockerfile'

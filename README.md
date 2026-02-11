@@ -6,6 +6,8 @@ A GitHub Action (and standalone CLI tool) for uploading files to Telegram using 
 
 - Upload multiple files as a single grouped message (album)
 - Upload progress reporting
+- Returns message URLs and IDs after upload
+- GitHub Actions outputs for downstream steps
 - Works as a GitHub Action or standalone CLI tool
 - Docker support
 
@@ -33,6 +35,15 @@ A GitHub Action (and standalone CLI tool) for uploading files to Telegram using 
 | `message` | Yes | The message/caption to send with the files |
 | `files` | Yes | File paths to upload, one file per line |
 
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `message_url` | URL of the first uploaded message |
+| `message_urls` | Comma-separated URLs of all uploaded messages |
+| `message_id` | ID of the first uploaded message |
+| `message_ids` | Comma-separated IDs of all uploaded messages |
+
 ### Example Workflow
 
 Create `.github/workflows/telegram-upload.yml`:
@@ -49,6 +60,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Upload files to Telegram
+      id: upload
       uses: xz-dev/TelegramFileUploader@v1
       with:
         to-who: 'username_or_chat_id'
@@ -60,6 +72,9 @@ jobs:
         API_ID: ${{ secrets.API_ID }}
         API_HASH: ${{ secrets.API_HASH }}
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+    - name: Print message URL
+      run: echo "Uploaded to ${{ steps.upload.outputs.message_url }}"
 ```
 
 Set `API_ID`, `API_HASH`, and `BOT_TOKEN` in your repository's **Settings > Secrets and variables > Actions**.
@@ -96,7 +111,7 @@ docker run \
 Install test dependencies:
 
 ```bash
-pip install -r requirements.txt pytest pytest-asyncio
+pip install -r requirements.txt pytest pytest-asyncio pytest-dotenv
 ```
 
 Run unit tests (no network required):
@@ -105,13 +120,22 @@ Run unit tests (no network required):
 pytest tests/test_unit.py -v
 ```
 
-Run integration tests (requires environment variables and real Telegram API access):
+Run integration tests (requires Telegram API credentials):
 
 ```bash
+# Option 1: environment variables
 export API_ID="your_api_id"
 export API_HASH="your_api_hash"
 export BOT_TOKEN="your_bot_token"
 export CHAT_ID="target_chat_id"
+
+# Option 2: .env file
+cat > .env <<EOF
+API_ID=your_api_id
+API_HASH=your_api_hash
+BOT_TOKEN=your_bot_token
+CHAT_ID=target_chat_id
+EOF
 
 pytest tests/test_integration.py -v
 ```

@@ -16,7 +16,7 @@ import pytest_asyncio
 
 from telethon import TelegramClient
 
-from main import main, validate_env
+from main import main, validate_env, UploadResult
 
 # Skip all tests in this module if credentials are missing
 REQUIRED_VARS = ["API_ID", "API_HASH", "BOT_TOKEN", "CHAT_ID"]
@@ -87,7 +87,12 @@ class TestSingleFileUpload:
     @pytest.mark.asyncio
     async def test_upload_single_file(self, telegram_client, chat_id, temp_files):
         filepath = temp_files(count=1, content="single file test")
-        await main(telegram_client, chat_id, "CI: single file upload test", [filepath])
+        result = await main(telegram_client, chat_id, "CI: single file upload test", [filepath])
+        assert isinstance(result, UploadResult)
+        assert len(result.message_urls) == 1
+        assert len(result.message_ids) == 1
+        assert result.message_ids[0] > 0
+        assert result.message_urls[0].startswith("https://t.me/")
 
     @pytest.mark.asyncio
     async def test_upload_empty_file_raises(self, telegram_client, chat_id):
@@ -107,12 +112,51 @@ class TestMultiFileUpload:
     @pytest.mark.asyncio
     async def test_upload_two_files(self, telegram_client, chat_id, temp_files):
         files = temp_files(count=2, content="multi file test")
-        await main(telegram_client, chat_id, "CI: two files upload test", files)
+        result = await main(telegram_client, chat_id, "CI: two files upload test", files)
+        assert isinstance(result, UploadResult)
+        assert len(result.message_urls) == 2
+        assert len(result.message_ids) == 2
+        for url in result.message_urls:
+            assert url.startswith("https://t.me/")
+        for msg_id in result.message_ids:
+            assert msg_id > 0
 
     @pytest.mark.asyncio
     async def test_upload_three_files(self, telegram_client, chat_id, temp_files):
         files = temp_files(count=3, content="three files")
-        await main(telegram_client, chat_id, "CI: three files upload test", files)
+        result = await main(telegram_client, chat_id, "CI: three files upload test", files)
+        assert isinstance(result, UploadResult)
+        assert len(result.message_urls) == 3
+        assert len(result.message_ids) == 3
+
+
+class TestUploadResultUrls:
+    """Test that upload results contain valid, consistent URLs."""
+
+    @pytest.mark.asyncio
+    async def test_urls_contain_message_ids(self, telegram_client, chat_id, temp_files):
+        """Each URL should end with the corresponding message ID."""
+        filepath = temp_files(count=1, content="url test")
+        result = await main(telegram_client, chat_id, "CI: url test", [filepath])
+        for url, msg_id in zip(result.message_urls, result.message_ids):
+            assert url.endswith(f"/{msg_id}")
+
+    @pytest.mark.asyncio
+    async def test_multi_file_urls_share_base(self, telegram_client, chat_id, temp_files):
+        """All URLs in an album should share the same base (same chat)."""
+        files = temp_files(count=2, content="shared base test")
+        result = await main(telegram_client, chat_id, "CI: shared base test", files)
+        # Strip the trailing /message_id to get the base URL
+        bases = [url.rsplit("/", 1)[0] for url in result.message_urls]
+        assert len(set(bases)) == 1, f"All URLs should share the same base, got: {bases}"
+
+    @pytest.mark.asyncio
+    async def test_message_ids_are_sequential(self, telegram_client, chat_id, temp_files):
+        """Album message IDs should be sequential (consecutive integers)."""
+        files = temp_files(count=3, content="sequential test")
+        result = await main(telegram_client, chat_id, "CI: sequential test", files)
+        for i in range(1, len(result.message_ids)):
+            assert result.message_ids[i] == result.message_ids[i - 1] + 1
 
 
 class TestFileTypes:
@@ -125,7 +169,9 @@ class TestFileTypes:
         f.write(b"\x00\x01\x02\x03" * 256)
         f.close()
         try:
-            await main(telegram_client, chat_id, "CI: binary file test", [f.name])
+            result = await main(telegram_client, chat_id, "CI: binary file test", [f.name])
+            assert isinstance(result, UploadResult)
+            assert len(result.message_urls) == 1
         finally:
             os.unlink(f.name)
 
@@ -136,12 +182,14 @@ class TestMessageContent:
     @pytest.mark.asyncio
     async def test_message_with_special_chars(self, telegram_client, chat_id, temp_files):
         filepath = temp_files(count=1)
-        await main(telegram_client, chat_id, "CI test: <b>bold</b> & special chars!@#$%", [filepath])
+        result = await main(telegram_client, chat_id, "CI test: <b>bold</b> & special chars!@#$%", [filepath])
+        assert isinstance(result, UploadResult)
 
     @pytest.mark.asyncio
     async def test_empty_message(self, telegram_client, chat_id, temp_files):
         filepath = temp_files(count=1)
-        await main(telegram_client, chat_id, "", [filepath])
+        result = await main(telegram_client, chat_id, "", [filepath])
+        assert isinstance(result, UploadResult)
 
 
 class TestErrorHandling:
