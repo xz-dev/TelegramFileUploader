@@ -2,28 +2,30 @@
 
 from argparse import ArgumentParser
 from os import environ
-from pathlib import Path
 
 from telethon import TelegramClient
 
-api_id = environ.get("API_ID")
-if not api_id:
-    print("API_ID is missing")
-    exit(1)
-api_id = int(api_id)
-api_hash = environ.get("API_HASH")
-if not api_hash:
-    print("API_HASH is missing")
-    exit(1)
-bot_token = environ.get("BOT_TOKEN")
-if not bot_token:
-    print("BOT_TOKEN is missing")
-    exit(1)
 
-bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)
+def validate_env():
+    """Validate required environment variables. Returns (api_id, api_hash, bot_token)."""
+    api_id = environ.get("API_ID")
+    if not api_id:
+        print("API_ID is missing")
+        exit(1)
+    api_id = int(api_id)
+    api_hash = environ.get("API_HASH")
+    if not api_hash:
+        print("API_HASH is missing")
+        exit(1)
+    bot_token = environ.get("BOT_TOKEN")
+    if not bot_token:
+        print("BOT_TOKEN is missing")
+        exit(1)
+    return api_id, api_hash, bot_token
 
 
 async def main(client: TelegramClient, to: str, message: str, files: list[str]):
+    """Upload files and send them as a grouped message to the target chat."""
     # Printing upload progress
     def callback(current, total):
         print(f"Uploaded: {current/total*100}%")
@@ -46,6 +48,7 @@ async def main(client: TelegramClient, to: str, message: str, files: list[str]):
 
 
 def get_arg_parser():
+    """Create the argument parser for CLI usage."""
     parser = ArgumentParser(prog="TelegramFileUploader", epilog="@GitHub:xz-dev")
     parser.add_argument("--to", help="Chat ID or username")
     parser.add_argument("--message", help="Message")
@@ -54,7 +57,7 @@ def get_arg_parser():
 
 
 def process_files_arg(files):
-    """处理 --files 参数中可能包含的换行符（GitHub Actions 多行输入场景）"""
+    """Process --files argument to handle newlines from GitHub Actions multi-line input."""
     processed_files = []
     for file_arg in files:
         processed_files.extend(
@@ -63,14 +66,18 @@ def process_files_arg(files):
     return processed_files
 
 
-parser = get_arg_parser()
-args = parser.parse_args()
+if __name__ == "__main__":
+    api_id, api_hash, bot_token = validate_env()
+    bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)
 
-if args.files:
-    args.files = process_files_arg(args.files)
+    parser = get_arg_parser()
+    args = parser.parse_args()
 
-with bot:
-    bot.loop.run_until_complete(main(bot, args.to, args.message, args.files))
+    if args.files:
+        args.files = process_files_arg(args.files)
 
-# Example:
-# python3 main.py --to "me" --message "Hello, World!" --files "file1.txt" "file2.txt"
+    with bot:
+        bot.loop.run_until_complete(main(bot, args.to, args.message, args.files))
+
+    # Example:
+    # python3 main.py --to "me" --message "Hello, World!" --files "file1.txt" "file2.txt"
