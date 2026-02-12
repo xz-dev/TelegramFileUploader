@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from os import environ
 
 from telethon import TelegramClient
-from telethon.tl.types import PeerChannel, PeerChat, PeerUser
+from telethon.tl.types import PeerChannel, PeerChat
 
 
 @dataclass
@@ -82,8 +82,7 @@ async def main(
         uploaded_files.append(ufile)
 
     print("Sending message")
-    message_list = [None for i in range(len(uploaded_files) - 1)]
-    message_list.append(message)
+    message_list = [""] * (len(uploaded_files) - 1) + [message]
     sent_messages = await client.send_file(
         entity=to, file=uploaded_files, caption=message_list, progress_callback=callback
     )

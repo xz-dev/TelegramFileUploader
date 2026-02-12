@@ -3,7 +3,7 @@
 import os
 import tempfile
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 
 from telethon.tl.types import PeerChannel, PeerChat, PeerUser
 

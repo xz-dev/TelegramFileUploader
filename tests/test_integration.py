@@ -87,7 +87,9 @@ class TestSingleFileUpload:
     @pytest.mark.asyncio
     async def test_upload_single_file(self, telegram_client, chat_id, temp_files):
         filepath = temp_files(count=1, content="single file test")
-        result = await main(telegram_client, chat_id, "CI: single file upload test", [filepath])
+        result = await main(
+            telegram_client, chat_id, "CI: single file upload test", [filepath]
+        )
         assert isinstance(result, UploadResult)
         assert len(result.message_urls) == 1
         assert len(result.message_ids) == 1
@@ -97,7 +99,9 @@ class TestSingleFileUpload:
     @pytest.mark.asyncio
     async def test_upload_empty_file_raises(self, telegram_client, chat_id):
         """Telegram API rejects empty files (0 bytes) with FilePartsInvalidError."""
-        f = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, prefix="tg_empty_")
+        f = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, prefix="tg_empty_"
+        )
         f.close()
         try:
             with pytest.raises(Exception):
@@ -112,7 +116,9 @@ class TestMultiFileUpload:
     @pytest.mark.asyncio
     async def test_upload_two_files(self, telegram_client, chat_id, temp_files):
         files = temp_files(count=2, content="multi file test")
-        result = await main(telegram_client, chat_id, "CI: two files upload test", files)
+        result = await main(
+            telegram_client, chat_id, "CI: two files upload test", files
+        )
         assert isinstance(result, UploadResult)
         assert len(result.message_urls) == 2
         assert len(result.message_ids) == 2
@@ -124,7 +130,9 @@ class TestMultiFileUpload:
     @pytest.mark.asyncio
     async def test_upload_three_files(self, telegram_client, chat_id, temp_files):
         files = temp_files(count=3, content="three files")
-        result = await main(telegram_client, chat_id, "CI: three files upload test", files)
+        result = await main(
+            telegram_client, chat_id, "CI: three files upload test", files
+        )
         assert isinstance(result, UploadResult)
         assert len(result.message_urls) == 3
         assert len(result.message_ids) == 3
@@ -142,16 +150,22 @@ class TestUploadResultUrls:
             assert url.endswith(f"/{msg_id}")
 
     @pytest.mark.asyncio
-    async def test_multi_file_urls_share_base(self, telegram_client, chat_id, temp_files):
+    async def test_multi_file_urls_share_base(
+        self, telegram_client, chat_id, temp_files
+    ):
         """All URLs in an album should share the same base (same chat)."""
         files = temp_files(count=2, content="shared base test")
         result = await main(telegram_client, chat_id, "CI: shared base test", files)
         # Strip the trailing /message_id to get the base URL
         bases = [url.rsplit("/", 1)[0] for url in result.message_urls]
-        assert len(set(bases)) == 1, f"All URLs should share the same base, got: {bases}"
+        assert len(set(bases)) == 1, (
+            f"All URLs should share the same base, got: {bases}"
+        )
 
     @pytest.mark.asyncio
-    async def test_message_ids_are_sequential(self, telegram_client, chat_id, temp_files):
+    async def test_message_ids_are_sequential(
+        self, telegram_client, chat_id, temp_files
+    ):
         """Album message IDs should be sequential (consecutive integers)."""
         files = temp_files(count=3, content="sequential test")
         result = await main(telegram_client, chat_id, "CI: sequential test", files)
@@ -165,11 +179,15 @@ class TestFileTypes:
     @pytest.mark.asyncio
     async def test_upload_binary_file(self, telegram_client, chat_id):
         """Binary files should upload without issues."""
-        f = tempfile.NamedTemporaryFile(mode="wb", suffix=".bin", delete=False, prefix="tg_bin_")
+        f = tempfile.NamedTemporaryFile(
+            mode="wb", suffix=".bin", delete=False, prefix="tg_bin_"
+        )
         f.write(b"\x00\x01\x02\x03" * 256)
         f.close()
         try:
-            result = await main(telegram_client, chat_id, "CI: binary file test", [f.name])
+            result = await main(
+                telegram_client, chat_id, "CI: binary file test", [f.name]
+            )
             assert isinstance(result, UploadResult)
             assert len(result.message_urls) == 1
         finally:
@@ -180,9 +198,16 @@ class TestMessageContent:
     """Test various message/caption scenarios."""
 
     @pytest.mark.asyncio
-    async def test_message_with_special_chars(self, telegram_client, chat_id, temp_files):
+    async def test_message_with_special_chars(
+        self, telegram_client, chat_id, temp_files
+    ):
         filepath = temp_files(count=1)
-        result = await main(telegram_client, chat_id, "CI test: <b>bold</b> & special chars!@#$%", [filepath])
+        result = await main(
+            telegram_client,
+            chat_id,
+            "CI test: <b>bold</b> & special chars!@#$%",
+            [filepath],
+        )
         assert isinstance(result, UploadResult)
 
     @pytest.mark.asyncio
@@ -198,10 +223,14 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_nonexistent_file_raises(self, telegram_client, chat_id):
         with pytest.raises(Exception):
-            await main(telegram_client, chat_id, "should fail", ["/nonexistent/file.txt"])
+            await main(
+                telegram_client, chat_id, "should fail", ["/nonexistent/file.txt"]
+            )
 
     @pytest.mark.asyncio
     async def test_invalid_chat_id_raises(self, telegram_client, temp_files):
         filepath = temp_files(count=1)
         with pytest.raises(Exception):
-            await main(telegram_client, "invalid_chat_id_99999999999", "test", [filepath])
+            await main(
+                telegram_client, "invalid_chat_id_99999999999", "test", [filepath]
+            )
