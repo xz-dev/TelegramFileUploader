@@ -3,7 +3,7 @@
 import os
 import tempfile
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 from telethon.tl.types import PeerChannel, PeerChat, PeerUser
 
@@ -12,9 +12,9 @@ from main import (
     get_arg_parser,
     validate_env,
     build_message_url,
+    parse_entity,
     UploadResult,
     write_github_output,
-    async_main,
 )
 
 
@@ -289,98 +289,23 @@ class TestWriteGithubOutput:
             os.unlink(output_path)
 
 
-class TestAsyncMain:
-    """Tests for the async_main() entry point to ensure correct TelegramClient initialization."""
+class TestParseEntity:
+    """Tests for the --to argument parsing."""
 
-    @pytest.mark.asyncio
-    async def test_bot_token_passed_to_start(self):
-        """Ensure bot_token is passed to client.start(), not triggered by __aenter__."""
-        mock_client = AsyncMock()
-        mock_client.start = AsyncMock()
-        mock_client.disconnect = AsyncMock()
+    def test_numeric_string_becomes_int(self):
+        assert parse_entity("-1003746238037") == -1003746238037
 
-        dummy_result = UploadResult(
-            message_urls=["https://t.me/c/123/1"],
-            message_ids=[1],
-        )
+    def test_positive_numeric_string(self):
+        assert parse_entity("123456") == 123456
 
-        with (
-            patch.dict(
-                "os.environ",
-                {"API_ID": "123", "API_HASH": "abc", "BOT_TOKEN": "fake:token"},
-                clear=True,
-            ),
-            patch("main.TelegramClient", return_value=mock_client),
-            patch("main.main", new_callable=AsyncMock, return_value=dummy_result),
-            patch(
-                "sys.argv",
-                ["main.py", "--to", "chat1", "--message", "hi", "--files", "f.txt"],
-            ),
-        ):
-            await async_main()
+    def test_username_stays_string(self):
+        assert parse_entity("@mychannel") == "@mychannel"
 
-        # The critical assertion: bot_token must be passed to start()
-        mock_client.start.assert_awaited_once_with(bot_token="fake:token")
-        mock_client.disconnect.assert_awaited_once()
+    def test_plain_username_stays_string(self):
+        assert parse_entity("mychannel") == "mychannel"
 
-    @pytest.mark.asyncio
-    async def test_no_async_with_context_manager(self):
-        """Ensure TelegramClient is NOT used as async context manager (which auto-calls start without bot_token)."""
-        mock_client = AsyncMock()
-        mock_client.start = AsyncMock()
-        mock_client.disconnect = AsyncMock()
-        # If __aenter__ is called, that means async with is being used - which is the bug
-        mock_client.__aenter__ = AsyncMock()
+    def test_none_returns_none(self):
+        assert parse_entity(None) is None
 
-        dummy_result = UploadResult(
-            message_urls=["https://t.me/c/123/1"],
-            message_ids=[1],
-        )
-
-        with (
-            patch.dict(
-                "os.environ",
-                {"API_ID": "123", "API_HASH": "abc", "BOT_TOKEN": "fake:token"},
-                clear=True,
-            ),
-            patch("main.TelegramClient", return_value=mock_client),
-            patch("main.main", new_callable=AsyncMock, return_value=dummy_result),
-            patch(
-                "sys.argv",
-                ["main.py", "--to", "chat1", "--message", "hi", "--files", "f.txt"],
-            ),
-        ):
-            await async_main()
-
-        # __aenter__ should NOT have been called
-        mock_client.__aenter__.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_disconnect_called_on_error(self):
-        """Ensure client.disconnect() is called even when main() raises."""
-        mock_client = AsyncMock()
-        mock_client.start = AsyncMock()
-        mock_client.disconnect = AsyncMock()
-
-        with (
-            patch.dict(
-                "os.environ",
-                {"API_ID": "123", "API_HASH": "abc", "BOT_TOKEN": "fake:token"},
-                clear=True,
-            ),
-            patch("main.TelegramClient", return_value=mock_client),
-            patch(
-                "main.main",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("upload failed"),
-            ),
-            patch(
-                "sys.argv",
-                ["main.py", "--to", "chat1", "--message", "hi", "--files", "f.txt"],
-            ),
-        ):
-            with pytest.raises(RuntimeError, match="upload failed"):
-                await async_main()
-
-        # disconnect must still be called in the finally block
-        mock_client.disconnect.assert_awaited_once()
+    def test_empty_string_stays_string(self):
+        assert parse_entity("") == ""

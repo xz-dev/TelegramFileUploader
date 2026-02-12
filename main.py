@@ -60,8 +60,8 @@ def build_message_url(
     return f"https://t.me/c/{peer_id.user_id}/{message_id}"
 
 
-async def main(
-    client: TelegramClient, to: str, message: str, files: list[str]
+async def upload(
+    client: TelegramClient, to: int | str, message: str, files: list[str]
 ) -> UploadResult:
     """Upload files and send them as a grouped message to the target chat.
 
@@ -82,9 +82,9 @@ async def main(
         uploaded_files.append(ufile)
 
     print("Sending message")
-    message_list = [""] * (len(uploaded_files) - 1) + [message]
+    message_list = [None] * (len(uploaded_files) - 1) + [message]
     sent_messages = await client.send_file(
-        entity=to, file=uploaded_files, caption=message_list, progress_callback=callback
+        entity=to, file=uploaded_files, caption=message_list
     )
     print("Sent message")
 
@@ -133,6 +133,18 @@ def get_arg_parser():
     return parser
 
 
+def parse_entity(to: str) -> int | str:
+    """Parse the --to argument into an int (chat ID) or str (username).
+
+    Telethon bots cannot resolve entity from numeric strings;
+    they must be passed as int.
+    """
+    try:
+        return int(to)
+    except (ValueError, TypeError):
+        return to
+
+
 def process_files_arg(files):
     """Process --files argument to handle newlines from GitHub Actions multi-line input."""
     processed_files = []
@@ -143,8 +155,12 @@ def process_files_arg(files):
     return processed_files
 
 
-async def async_main():
+if __name__ == "__main__":
     api_id, api_hash, bot_token = validate_env()
+    # .start() is synchronous when the event loop is not running:
+    # it internally calls loop.run_until_complete() and returns self (TelegramClient).
+    # The type checker cannot see this dual sync/async behavior.
+    bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)  # type: ignore  # noqa: E501
 
     parser = get_arg_parser()
     args = parser.parse_args()
@@ -152,24 +168,18 @@ async def async_main():
     if args.files:
         args.files = process_files_arg(args.files)
 
-    bot = TelegramClient("bot", api_id, api_hash)
-    await bot.start(bot_token=bot_token)
-    try:
-        result = await main(bot, args.to, args.message, args.files)
-    finally:
-        await bot.disconnect()
+    # __enter__/__exit__ are dynamically assigned from helpers._sync_enter/_sync_exit
+    # and are not visible to static type checkers.
+    with bot:  # type: ignore[attr-defined]
+        result = bot.loop.run_until_complete(
+            upload(bot, parse_entity(args.to), args.message, args.files)
+        )
 
     # Output results
     for url in result.message_urls:
         print(f"Message URL: {url}")
 
     write_github_output(result)
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(async_main())
 
     # Example:
     # python3 main.py --to "me" --message "Hello, World!" --files "file1.txt" "file2.txt"
