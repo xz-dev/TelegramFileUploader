@@ -10,13 +10,14 @@ Tests are skipped automatically when credentials are not available.
 """
 
 import os
+import sys
 import tempfile
 import pytest
 import pytest_asyncio
 
 from telethon import TelegramClient
 
-from main import main, validate_env, UploadResult
+from main import async_main, upload, validate_env, UploadResult
 
 # Skip all tests in this module if credentials are missing
 REQUIRED_VARS = ["API_ID", "API_HASH", "BOT_TOKEN", "CHAT_ID"]
@@ -87,7 +88,7 @@ class TestSingleFileUpload:
     @pytest.mark.asyncio
     async def test_upload_single_file(self, telegram_client, chat_id, temp_files):
         filepath = temp_files(count=1, content="single file test")
-        result = await main(
+        result = await upload(
             telegram_client, chat_id, "CI: single file upload test", [filepath]
         )
         assert isinstance(result, UploadResult)
@@ -105,7 +106,7 @@ class TestSingleFileUpload:
         f.close()
         try:
             with pytest.raises(Exception):
-                await main(telegram_client, chat_id, "CI: empty file test", [f.name])
+                await upload(telegram_client, chat_id, "CI: empty file test", [f.name])
         finally:
             os.unlink(f.name)
 
@@ -116,7 +117,7 @@ class TestMultiFileUpload:
     @pytest.mark.asyncio
     async def test_upload_two_files(self, telegram_client, chat_id, temp_files):
         files = temp_files(count=2, content="multi file test")
-        result = await main(
+        result = await upload(
             telegram_client, chat_id, "CI: two files upload test", files
         )
         assert isinstance(result, UploadResult)
@@ -130,7 +131,7 @@ class TestMultiFileUpload:
     @pytest.mark.asyncio
     async def test_upload_three_files(self, telegram_client, chat_id, temp_files):
         files = temp_files(count=3, content="three files")
-        result = await main(
+        result = await upload(
             telegram_client, chat_id, "CI: three files upload test", files
         )
         assert isinstance(result, UploadResult)
@@ -145,7 +146,7 @@ class TestUploadResultUrls:
     async def test_urls_contain_message_ids(self, telegram_client, chat_id, temp_files):
         """Each URL should end with the corresponding message ID."""
         filepath = temp_files(count=1, content="url test")
-        result = await main(telegram_client, chat_id, "CI: url test", [filepath])
+        result = await upload(telegram_client, chat_id, "CI: url test", [filepath])
         for url, msg_id in zip(result.message_urls, result.message_ids):
             assert url.endswith(f"/{msg_id}")
 
@@ -155,7 +156,7 @@ class TestUploadResultUrls:
     ):
         """All URLs in an album should share the same base (same chat)."""
         files = temp_files(count=2, content="shared base test")
-        result = await main(telegram_client, chat_id, "CI: shared base test", files)
+        result = await upload(telegram_client, chat_id, "CI: shared base test", files)
         # Strip the trailing /message_id to get the base URL
         bases = [url.rsplit("/", 1)[0] for url in result.message_urls]
         assert len(set(bases)) == 1, (
@@ -168,7 +169,7 @@ class TestUploadResultUrls:
     ):
         """Album message IDs should be sequential (consecutive integers)."""
         files = temp_files(count=3, content="sequential test")
-        result = await main(telegram_client, chat_id, "CI: sequential test", files)
+        result = await upload(telegram_client, chat_id, "CI: sequential test", files)
         for i in range(1, len(result.message_ids)):
             assert result.message_ids[i] == result.message_ids[i - 1] + 1
 
@@ -185,7 +186,7 @@ class TestFileTypes:
         f.write(b"\x00\x01\x02\x03" * 256)
         f.close()
         try:
-            result = await main(
+            result = await upload(
                 telegram_client, chat_id, "CI: binary file test", [f.name]
             )
             assert isinstance(result, UploadResult)
@@ -202,7 +203,7 @@ class TestMessageContent:
         self, telegram_client, chat_id, temp_files
     ):
         filepath = temp_files(count=1)
-        result = await main(
+        result = await upload(
             telegram_client,
             chat_id,
             "CI test: <b>bold</b> & special chars!@#$%",
@@ -213,7 +214,7 @@ class TestMessageContent:
     @pytest.mark.asyncio
     async def test_empty_message(self, telegram_client, chat_id, temp_files):
         filepath = temp_files(count=1)
-        result = await main(telegram_client, chat_id, "", [filepath])
+        result = await upload(telegram_client, chat_id, "", [filepath])
         assert isinstance(result, UploadResult)
 
 
@@ -223,7 +224,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_nonexistent_file_raises(self, telegram_client, chat_id):
         with pytest.raises(Exception):
-            await main(
+            await upload(
                 telegram_client, chat_id, "should fail", ["/nonexistent/file.txt"]
             )
 
@@ -231,6 +232,114 @@ class TestErrorHandling:
     async def test_invalid_chat_id_raises(self, telegram_client, temp_files):
         filepath = temp_files(count=1)
         with pytest.raises(Exception):
-            await main(
+            await upload(
                 telegram_client, "invalid_chat_id_99999999999", "test", [filepath]
             )
+
+
+class TestAsyncMain:
+    """Integration tests for the async_main CLI entry point."""
+
+    @pytest.mark.asyncio
+    async def test_async_main_single_file(self, temp_files, chat_id, capsys):
+        """async_main should upload a file and print the message URL."""
+        filepath = temp_files(count=1, content="async_main integration test")
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                "main.py",
+                "--to",
+                str(chat_id),
+                "--message",
+                "CI: async_main single file test",
+                "--files",
+                filepath,
+            ]
+            await async_main()
+        finally:
+            sys.argv = original_argv
+
+        output = capsys.readouterr().out
+        assert "https://t.me/" in output
+
+    @pytest.mark.asyncio
+    async def test_async_main_multiple_files(self, temp_files, chat_id, capsys):
+        """async_main should handle multiple files passed via --files."""
+        files = temp_files(count=2, content="async_main multi test")
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                "main.py",
+                "--to",
+                str(chat_id),
+                "--message",
+                "CI: async_main multi file test",
+                "--files",
+                *files,
+            ]
+            await async_main()
+        finally:
+            sys.argv = original_argv
+
+        output = capsys.readouterr().out
+        assert output.count("https://t.me/") == 2
+
+    @pytest.mark.asyncio
+    async def test_async_main_multiline_files_arg(self, temp_files, chat_id, capsys):
+        """async_main should handle newline-separated files (GitHub Actions style)."""
+        files = temp_files(count=2, content="async_main newline test")
+        multiline_arg = "\n".join(files)
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                "main.py",
+                "--to",
+                str(chat_id),
+                "--message",
+                "CI: async_main multiline files test",
+                "--files",
+                multiline_arg,
+            ]
+            await async_main()
+        finally:
+            sys.argv = original_argv
+
+        output = capsys.readouterr().out
+        assert output.count("https://t.me/") == 2
+
+    @pytest.mark.asyncio
+    async def test_async_main_writes_github_output(self, temp_files, chat_id):
+        """async_main should write results to GITHUB_OUTPUT file when set."""
+        filepath = temp_files(count=1, content="github output test")
+        output_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, prefix="gh_output_"
+        )
+        output_file.close()
+
+        original_argv = sys.argv
+        original_gh = os.environ.get("GITHUB_OUTPUT")
+        try:
+            sys.argv = [
+                "main.py",
+                "--to",
+                str(chat_id),
+                "--message",
+                "CI: async_main github output test",
+                "--files",
+                filepath,
+            ]
+            os.environ["GITHUB_OUTPUT"] = output_file.name
+            await async_main()
+
+            with open(output_file.name) as f:
+                content = f.read()
+            assert "message_url=" in content
+            assert "message_id=" in content
+            assert "https://t.me/" in content
+        finally:
+            sys.argv = original_argv
+            if original_gh is None:
+                os.environ.pop("GITHUB_OUTPUT", None)
+            else:
+                os.environ["GITHUB_OUTPUT"] = original_gh
+            os.unlink(output_file.name)
