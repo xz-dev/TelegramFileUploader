@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from os import environ
@@ -20,16 +21,16 @@ def validate_env():
     """Validate required environment variables. Returns (api_id, api_hash, bot_token)."""
     api_id = environ.get("API_ID")
     if not api_id:
-        print("API_ID is missing")
+        print("API_ID is missing", flush=True)
         exit(1)
     api_id = int(api_id)
     api_hash = environ.get("API_HASH")
     if not api_hash:
-        print("API_HASH is missing")
+        print("API_HASH is missing", flush=True)
         exit(1)
     bot_token = environ.get("BOT_TOKEN")
     if not bot_token:
-        print("BOT_TOKEN is missing")
+        print("BOT_TOKEN is missing", flush=True)
         exit(1)
     return api_id, api_hash, bot_token
 
@@ -71,22 +72,24 @@ async def upload(
 
     # Printing upload progress
     def callback(current, total):
-        print(f"Uploaded: {current / total * 100}%")
+        print(f"Uploaded: {current / total * 100}%", flush=True)
 
     # Upload files
     uploaded_files = []
     for file in files:
-        print(f"Uploading {file}")
+        print(f"Uploading {file}", flush=True)
         ufile = await client.upload_file(file, progress_callback=callback)
-        print(f"Uploaded {file}")
+        print(f"Uploaded {file}", flush=True)
         uploaded_files.append(ufile)
 
-    print("Sending message")
+    print("Sending message", flush=True)
     message_list = [None] * (len(uploaded_files) - 1) + [message]
     sent_messages = await client.send_file(
-        entity=to, file=uploaded_files, caption=message_list
+        entity=to,
+        file=uploaded_files,
+        caption=message_list,  # type: ignore[arg-type]
     )
-    print("Sent message")
+    print("Sent message", flush=True)
 
     # Normalize to list (single file returns a single Message, not a list)
     if not isinstance(sent_messages, list):
@@ -155,12 +158,8 @@ def process_files_arg(files):
     return processed_files
 
 
-if __name__ == "__main__":
+async def async_main():
     api_id, api_hash, bot_token = validate_env()
-    # .start() is synchronous when the event loop is not running:
-    # it internally calls loop.run_until_complete() and returns self (TelegramClient).
-    # The type checker cannot see this dual sync/async behavior.
-    bot = TelegramClient("bot", api_id, api_hash).start(bot_token=bot_token)  # type: ignore  # noqa: E501
 
     parser = get_arg_parser()
     args = parser.parse_args()
@@ -168,18 +167,22 @@ if __name__ == "__main__":
     if args.files:
         args.files = process_files_arg(args.files)
 
-    # __enter__/__exit__ are dynamically assigned from helpers._sync_enter/_sync_exit
-    # and are not visible to static type checkers.
-    with bot:  # type: ignore[attr-defined]
-        result = bot.loop.run_until_complete(
-            upload(bot, parse_entity(args.to), args.message, args.files)
-        )
+    bot = TelegramClient("bot", api_id, api_hash)
+    await bot.start(bot_token=bot_token)
+    try:
+        result = await upload(bot, parse_entity(args.to), args.message, args.files)
+    finally:
+        await bot.disconnect()
 
     # Output results
     for url in result.message_urls:
-        print(f"Message URL: {url}")
+        print(f"Message URL: {url}", flush=True)
 
     write_github_output(result)
+
+
+if __name__ == "__main__":
+    asyncio.run(async_main())
 
     # Example:
     # python3 main.py --to "me" --message "Hello, World!" --files "file1.txt" "file2.txt"

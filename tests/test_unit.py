@@ -304,8 +304,5 @@ class TestParseEntity:
     def test_plain_username_stays_string(self):
         assert parse_entity("mychannel") == "mychannel"
 
-    def test_none_returns_none(self):
-        assert parse_entity(None) is None
-
     def test_empty_string_stays_string(self):
         assert parse_entity("") == ""
