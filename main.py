@@ -34,7 +34,9 @@ def validate_env():
     return api_id, api_hash, bot_token
 
 
-def build_message_url(peer_id, message_id: int, chat_username: str | None = None) -> str:
+def build_message_url(
+    peer_id, message_id: int, chat_username: str | None = None
+) -> str:
     """Build a Telegram message URL from peer info and message ID.
 
     Args:
@@ -69,7 +71,7 @@ async def main(
 
     # Printing upload progress
     def callback(current, total):
-        print(f"Uploaded: {current/total*100}%")
+        print(f"Uploaded: {current / total * 100}%")
 
     # Upload files
     uploaded_files = []
@@ -151,9 +153,12 @@ async def async_main():
     if args.files:
         args.files = process_files_arg(args.files)
 
-    async with TelegramClient("bot", api_id, api_hash) as bot:
-        await bot.start(bot_token=bot_token)
+    bot = TelegramClient("bot", api_id, api_hash)
+    await bot.start(bot_token=bot_token)
+    try:
         result = await main(bot, args.to, args.message, args.files)
+    finally:
+        await bot.disconnect()
 
     # Output results
     for url in result.message_urls:

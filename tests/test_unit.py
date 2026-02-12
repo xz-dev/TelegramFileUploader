@@ -3,11 +3,19 @@
 import os
 import tempfile
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock, MagicMock
 
 from telethon.tl.types import PeerChannel, PeerChat, PeerUser
 
-from main import process_files_arg, get_arg_parser, validate_env, build_message_url, UploadResult, write_github_output
+from main import (
+    process_files_arg,
+    get_arg_parser,
+    validate_env,
+    build_message_url,
+    UploadResult,
+    write_github_output,
+    async_main,
+)
 
 
 class TestProcessFilesArg:
@@ -17,27 +25,45 @@ class TestProcessFilesArg:
         assert process_files_arg(["file1.txt"]) == ["file1.txt"]
 
     def test_multiple_separate_args(self):
-        assert process_files_arg(["file1.txt", "file2.txt"]) == ["file1.txt", "file2.txt"]
+        assert process_files_arg(["file1.txt", "file2.txt"]) == [
+            "file1.txt",
+            "file2.txt",
+        ]
 
     def test_multiline_input(self):
         """GitHub Actions passes multi-line input as a single string."""
         assert process_files_arg(["file1.txt\nfile2.txt"]) == ["file1.txt", "file2.txt"]
 
     def test_multiline_with_trailing_newline(self):
-        assert process_files_arg(["file1.txt\nfile2.txt\n"]) == ["file1.txt", "file2.txt"]
+        assert process_files_arg(["file1.txt\nfile2.txt\n"]) == [
+            "file1.txt",
+            "file2.txt",
+        ]
 
     def test_multiline_with_carriage_return(self):
         """Windows-style line endings from GitHub Actions."""
-        assert process_files_arg(["file1.txt\r\nfile2.txt\r\n"]) == ["file1.txt", "file2.txt"]
+        assert process_files_arg(["file1.txt\r\nfile2.txt\r\n"]) == [
+            "file1.txt",
+            "file2.txt",
+        ]
 
     def test_strips_leading_and_trailing_whitespace(self):
-        assert process_files_arg(["  file1.txt  \n  file2.txt  "]) == ["file1.txt", "file2.txt"]
+        assert process_files_arg(["  file1.txt  \n  file2.txt  "]) == [
+            "file1.txt",
+            "file2.txt",
+        ]
 
     def test_filters_empty_lines(self):
-        assert process_files_arg(["file1.txt\n\n\nfile2.txt"]) == ["file1.txt", "file2.txt"]
+        assert process_files_arg(["file1.txt\n\n\nfile2.txt"]) == [
+            "file1.txt",
+            "file2.txt",
+        ]
 
     def test_filters_whitespace_only_lines(self):
-        assert process_files_arg(["file1.txt\n   \n  \nfile2.txt"]) == ["file1.txt", "file2.txt"]
+        assert process_files_arg(["file1.txt\n   \n  \nfile2.txt"]) == [
+            "file1.txt",
+            "file2.txt",
+        ]
 
     def test_multiple_args_each_with_newlines(self):
         result = process_files_arg(["a.txt\nb.txt", "c.txt\nd.txt"])
@@ -54,7 +80,9 @@ class TestProcessFilesArg:
         assert process_files_arg(["path/to/my file.txt"]) == ["path/to/my file.txt"]
 
     def test_preserves_absolute_paths(self):
-        assert process_files_arg(["/tmp/build/artifact.zip"]) == ["/tmp/build/artifact.zip"]
+        assert process_files_arg(["/tmp/build/artifact.zip"]) == [
+            "/tmp/build/artifact.zip"
+        ]
 
 
 class TestGetArgParser:
@@ -62,7 +90,9 @@ class TestGetArgParser:
 
     def test_all_args_parsed(self):
         parser = get_arg_parser()
-        args = parser.parse_args(["--to", "chat123", "--message", "hello", "--files", "a.txt", "b.txt"])
+        args = parser.parse_args(
+            ["--to", "chat123", "--message", "hello", "--files", "a.txt", "b.txt"]
+        )
         assert args.to == "chat123"
         assert args.message == "hello"
         assert args.files == ["a.txt", "b.txt"]
@@ -74,7 +104,9 @@ class TestGetArgParser:
 
     def test_multiple_files(self):
         parser = get_arg_parser()
-        args = parser.parse_args(["--to", "x", "--message", "m", "--files", "f1", "f2", "f3"])
+        args = parser.parse_args(
+            ["--to", "x", "--message", "m", "--files", "f1", "f2", "f3"]
+        )
         assert args.files == ["f1", "f2", "f3"]
 
     def test_no_args_defaults_to_none(self):
@@ -86,7 +118,9 @@ class TestGetArgParser:
 
     def test_message_with_spaces(self):
         parser = get_arg_parser()
-        args = parser.parse_args(["--to", "x", "--message", "hello world", "--files", "f.txt"])
+        args = parser.parse_args(
+            ["--to", "x", "--message", "hello world", "--files", "f.txt"]
+        )
         assert args.message == "hello world"
 
 
@@ -94,7 +128,11 @@ class TestValidateEnv:
     """Tests for environment variable validation."""
 
     def test_all_env_vars_present(self):
-        with patch.dict("os.environ", {"API_ID": "12345", "API_HASH": "abc123", "BOT_TOKEN": "tok:en"}, clear=True):
+        with patch.dict(
+            "os.environ",
+            {"API_ID": "12345", "API_HASH": "abc123", "BOT_TOKEN": "tok:en"},
+            clear=True,
+        ):
             api_id, api_hash, bot_token = validate_env()
             assert api_id == 12345
             assert api_hash == "abc123"
@@ -116,7 +154,11 @@ class TestValidateEnv:
                 validate_env()
 
     def test_non_numeric_api_id_raises(self):
-        with patch.dict("os.environ", {"API_ID": "not_a_number", "API_HASH": "abc", "BOT_TOKEN": "tok"}, clear=True):
+        with patch.dict(
+            "os.environ",
+            {"API_ID": "not_a_number", "API_HASH": "abc", "BOT_TOKEN": "tok"},
+            clear=True,
+        ):
             with pytest.raises(ValueError):
                 validate_env()
 
@@ -245,3 +287,100 @@ class TestWriteGithubOutput:
             assert "message_id=5" in content
         finally:
             os.unlink(output_path)
+
+
+class TestAsyncMain:
+    """Tests for the async_main() entry point to ensure correct TelegramClient initialization."""
+
+    @pytest.mark.asyncio
+    async def test_bot_token_passed_to_start(self):
+        """Ensure bot_token is passed to client.start(), not triggered by __aenter__."""
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.disconnect = AsyncMock()
+
+        dummy_result = UploadResult(
+            message_urls=["https://t.me/c/123/1"],
+            message_ids=[1],
+        )
+
+        with (
+            patch.dict(
+                "os.environ",
+                {"API_ID": "123", "API_HASH": "abc", "BOT_TOKEN": "fake:token"},
+                clear=True,
+            ),
+            patch("main.TelegramClient", return_value=mock_client),
+            patch("main.main", new_callable=AsyncMock, return_value=dummy_result),
+            patch(
+                "sys.argv",
+                ["main.py", "--to", "chat1", "--message", "hi", "--files", "f.txt"],
+            ),
+        ):
+            await async_main()
+
+        # The critical assertion: bot_token must be passed to start()
+        mock_client.start.assert_awaited_once_with(bot_token="fake:token")
+        mock_client.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_no_async_with_context_manager(self):
+        """Ensure TelegramClient is NOT used as async context manager (which auto-calls start without bot_token)."""
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.disconnect = AsyncMock()
+        # If __aenter__ is called, that means async with is being used - which is the bug
+        mock_client.__aenter__ = AsyncMock()
+
+        dummy_result = UploadResult(
+            message_urls=["https://t.me/c/123/1"],
+            message_ids=[1],
+        )
+
+        with (
+            patch.dict(
+                "os.environ",
+                {"API_ID": "123", "API_HASH": "abc", "BOT_TOKEN": "fake:token"},
+                clear=True,
+            ),
+            patch("main.TelegramClient", return_value=mock_client),
+            patch("main.main", new_callable=AsyncMock, return_value=dummy_result),
+            patch(
+                "sys.argv",
+                ["main.py", "--to", "chat1", "--message", "hi", "--files", "f.txt"],
+            ),
+        ):
+            await async_main()
+
+        # __aenter__ should NOT have been called
+        mock_client.__aenter__.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_disconnect_called_on_error(self):
+        """Ensure client.disconnect() is called even when main() raises."""
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.disconnect = AsyncMock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {"API_ID": "123", "API_HASH": "abc", "BOT_TOKEN": "fake:token"},
+                clear=True,
+            ),
+            patch("main.TelegramClient", return_value=mock_client),
+            patch(
+                "main.main",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("upload failed"),
+            ),
+            patch(
+                "sys.argv",
+                ["main.py", "--to", "chat1", "--message", "hi", "--files", "f.txt"],
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="upload failed"):
+                await async_main()
+
+        # disconnect must still be called in the finally block
+        mock_client.disconnect.assert_awaited_once()
