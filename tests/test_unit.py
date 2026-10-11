@@ -2,18 +2,18 @@
 
 import os
 import tempfile
-import pytest
 from unittest.mock import patch
 
+import pytest
 from telethon.tl.types import PeerChannel, PeerChat, PeerUser
 
 from main import (
-    process_files_arg,
-    get_arg_parser,
-    validate_env,
-    build_message_url,
-    parse_entity,
     UploadResult,
+    build_message_url,
+    get_arg_parser,
+    parse_entity,
+    process_files_arg,
+    validate_env,
     write_github_output,
 )
 
@@ -139,28 +139,33 @@ class TestValidateEnv:
             assert bot_token == "tok:en"
 
     def test_missing_api_id_exits(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(SystemExit):
-                validate_env()
+        with patch.dict("os.environ", {}, clear=True), pytest.raises(SystemExit):
+            validate_env()
 
     def test_missing_api_hash_exits(self):
-        with patch.dict("os.environ", {"API_ID": "123"}, clear=True):
-            with pytest.raises(SystemExit):
-                validate_env()
+        with (
+            patch.dict("os.environ", {"API_ID": "123"}, clear=True),
+            pytest.raises(SystemExit),
+        ):
+            validate_env()
 
     def test_missing_bot_token_exits(self):
-        with patch.dict("os.environ", {"API_ID": "123", "API_HASH": "abc"}, clear=True):
-            with pytest.raises(SystemExit):
-                validate_env()
+        with (
+            patch.dict("os.environ", {"API_ID": "123", "API_HASH": "abc"}, clear=True),
+            pytest.raises(SystemExit),
+        ):
+            validate_env()
 
     def test_non_numeric_api_id_raises(self):
-        with patch.dict(
-            "os.environ",
-            {"API_ID": "not_a_number", "API_HASH": "abc", "BOT_TOKEN": "tok"},
-            clear=True,
+        with (
+            patch.dict(
+                "os.environ",
+                {"API_ID": "not_a_number", "API_HASH": "abc", "BOT_TOKEN": "tok"},
+                clear=True,
+            ),
+            pytest.raises(ValueError),
         ):
-            with pytest.raises(ValueError):
-                validate_env()
+            validate_env()
 
 
 class TestBuildMessageUrl:
