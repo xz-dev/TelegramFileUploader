@@ -1,4 +1,4 @@
-FROM python:3.14.6-alpine
+FROM python:3.14.8-alpine
 LABEL maintainer="xz-dev <xiangzhedev@gmail.com>"
 
 COPY . /app
