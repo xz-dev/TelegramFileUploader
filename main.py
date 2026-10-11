@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from os import environ
@@ -22,16 +23,16 @@ def validate_env():
     api_id = environ.get("API_ID")
     if not api_id:
         print("API_ID is missing", flush=True)
-        exit(1)
+        sys.exit(1)
     api_id = int(api_id)
     api_hash = environ.get("API_HASH")
     if not api_hash:
         print("API_HASH is missing", flush=True)
-        exit(1)
+        sys.exit(1)
     bot_token = environ.get("BOT_TOKEN")
     if not bot_token:
         print("BOT_TOKEN is missing", flush=True)
-        exit(1)
+        sys.exit(1)
     return api_id, api_hash, bot_token
 
 
@@ -100,8 +101,11 @@ async def upload(
     try:
         entity = await client.get_entity(to)
         chat_username = getattr(entity, "username", None)
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 - username lookup is best-effort; any failure falls back to private URL format
+        print(
+            f"Could not resolve chat username, using private URL format: {e}",
+            flush=True,
+        )
 
     # Build URLs for each message
     message_urls = []

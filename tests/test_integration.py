@@ -9,15 +9,17 @@ These tests require environment variables:
 Tests are skipped automatically when credentials are not available.
 """
 
+import asyncio
 import os
 import sys
 import tempfile
+
 import pytest
 import pytest_asyncio
-
 from telethon import TelegramClient
+from telethon.errors import FilePartsInvalidError, RPCError
 
-from main import async_main, upload, validate_env, UploadResult
+from main import UploadResult, async_main, upload, validate_env
 
 # Skip all tests in this module if credentials are missing
 REQUIRED_VARS = ["API_ID", "API_HASH", "BOT_TOKEN", "CHAT_ID"]
@@ -51,11 +53,10 @@ def temp_files():
 
     def _make(count=1, content="test content", suffix=".txt"):
         for i in range(count):
-            f = tempfile.NamedTemporaryFile(
+            with tempfile.NamedTemporaryFile(
                 mode="w", suffix=suffix, delete=False, prefix=f"tg_test_{i}_"
-            )
-            f.write(f"{content} #{i}")
-            f.close()
+            ) as f:
+                f.write(f"{content} #{i}")
             created.append(f.name)
         return created if count > 1 else created[0]
 
@@ -100,12 +101,12 @@ class TestSingleFileUpload:
     @pytest.mark.asyncio
     async def test_upload_empty_file_raises(self, telegram_client, chat_id):
         """Telegram API rejects empty files (0 bytes) with FilePartsInvalidError."""
-        f = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w", suffix=".txt", delete=False, prefix="tg_empty_"
-        )
-        f.close()
+        ) as f:
+            pass
         try:
-            with pytest.raises(Exception):
+            with pytest.raises(FilePartsInvalidError):
                 await upload(telegram_client, chat_id, "CI: empty file test", [f.name])
         finally:
             os.unlink(f.name)
@@ -180,11 +181,10 @@ class TestFileTypes:
     @pytest.mark.asyncio
     async def test_upload_binary_file(self, telegram_client, chat_id):
         """Binary files should upload without issues."""
-        f = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="wb", suffix=".bin", delete=False, prefix="tg_bin_"
-        )
-        f.write(b"\x00\x01\x02\x03" * 256)
-        f.close()
+        ) as f:
+            f.write(b"\x00\x01\x02\x03" * 256)
         try:
             result = await upload(
                 telegram_client, chat_id, "CI: binary file test", [f.name]
@@ -223,7 +223,7 @@ class TestErrorHandling:
 
     @pytest.mark.asyncio
     async def test_nonexistent_file_raises(self, telegram_client, chat_id):
-        with pytest.raises(Exception):
+        with pytest.raises(FileNotFoundError):
             await upload(
                 telegram_client, chat_id, "should fail", ["/nonexistent/file.txt"]
             )
@@ -231,7 +231,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_invalid_chat_id_raises(self, telegram_client, temp_files):
         filepath = temp_files(count=1)
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, RPCError)):
             await upload(
                 telegram_client, "invalid_chat_id_99999999999", "test", [filepath]
             )
@@ -311,10 +311,10 @@ class TestAsyncMain:
     async def test_async_main_writes_github_output(self, temp_files, chat_id):
         """async_main should write results to GITHUB_OUTPUT file when set."""
         filepath = temp_files(count=1, content="github output test")
-        output_file = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w", suffix=".txt", delete=False, prefix="gh_output_"
-        )
-        output_file.close()
+        ) as output_file:
+            pass
 
         original_argv = sys.argv
         original_gh = os.environ.get("GITHUB_OUTPUT")
@@ -331,8 +331,11 @@ class TestAsyncMain:
             os.environ["GITHUB_OUTPUT"] = output_file.name
             await async_main()
 
-            with open(output_file.name) as f:
-                content = f.read()
+            def _read():
+                with open(output_file.name) as f:
+                    return f.read()
+
+            content = await asyncio.to_thread(_read)
             assert "message_url=" in content
             assert "message_id=" in content
             assert "https://t.me/" in content
